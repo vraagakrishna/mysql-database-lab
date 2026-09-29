@@ -1,1239 +1,2923 @@
-# MySQL Database Exercises
+# MySQL Database Lab --- Complete MySQL + Flyway Guide
 
-## Overview
+> A complete record of the MySQL Workbench + Flyway setup,
+> troubleshooting journey, migration history, repeatable database
+> objects, SQL query collection, and final project structure.
 
-You are going to build a small **Customer and Order Management System** using MySQL.
+------------------------------------------------------------------------
 
-The exercise is designed to grow as new SQL concepts are introduced.
+## 1. Project Overview
 
-You will start with a single table and gradually introduce:
+This project is a practical MySQL database lab built and managed with
+**MySQL Workbench** and **Flyway Community Edition**.
 
-- Data types
-- Primary keys
-- Inserting data
-- Updating data
-- Selecting data
-- Filtering
-- Sorting
-- Foreign keys
-- Relationships
-- Joins
-- Indexes
-- Aggregation
-- Upserts
-- Repeatable Flyway migrations
-- Stored procedures
-- Transactions
-- Query optimisation
-- Advanced SQL
+The project documents:
 
-You will work with the **same database and data throughout the exercise**.
+-   MySQL installation and connection setup
+-   MySQL Workbench configuration
+-   Flyway installation and configuration
+-   Database migrations
+-   Migration troubleshooting and recovery
+-   Customer and order database changes
+-   Versioned Flyway migrations
+-   Repeatable Flyway migrations
+-   Customer/order reporting queries
+-   SQL aggregation, sorting, transactions, procedures, views, and
+    index-related work
+-   A reusable workflow for future MySQL + Flyway projects
 
-This is intentional.
+### Main technologies
 
-Later exercises will depend on decisions and data introduced earlier.
+-   **Operating System:** Windows 11
+-   **Database:** MySQL 8.0.43
+-   **Database Client:** MySQL Workbench
+-   **Migration Tool:** Flyway Community Edition 13.7.0
+-   **Database:** `customer_order_management`
+-   **Project folder:** `D:\mysql-db-lab`
+-   **Flyway installation:** `D:\flyway\flyway-13.7.0`
 
----
+------------------------------------------------------------------------
 
-# Scenario
+# 2. Final Repository Structure
 
-You work for a company that sells products to customers in different countries.
+The repository is organized into two separate SQL-related areas:
 
-The company has a customer management system and needs to maintain:
+1.  `sql/` --- Flyway-controlled database migrations and repeatable
+    database objects
+2.  `queries/` --- SQL queries used for reporting, practice, analysis,
+    procedures, transactions, sorting, aggregation, and other database
+    exercises
 
-- Customer information
-- Customer contact information
-- Customer location
-- Customer orders
+The final project structure is:
 
-A customer can place multiple orders.
-
-An order belongs to one customer.
-
-```text
-Customer
-   |
-   | 1
-   |
-   | many
-   |
- Order
+``` text
+D:\mysql-db-lab
+│
+├── .git\
+│
+├── flyway.toml
+│
+├── queries\
+│   ├── Advanced_Sql.sql
+│   ├── Aggregation_and_Business_Reporting.sql
+│   ├── customer_order_queries.sql
+│   ├── customer_service_queries.sql
+│   ├── Customer_Summary.sql
+│   ├── indexes_explain.sql
+│   ├── Procedure_Queries.sql
+│   ├── Sorting_Queries.sql
+│   └── Transactions_Queries.sql
+│
+└── sql\
+    ├── R__create_customer_order.sql
+    ├── R__customer_order_history_procedure.sql
+    ├── R__customer_reporting_view.sql
+    ├── R__customer_summary_procedure.sql
+    │
+    ├── V1__customers_table.sql
+    ├── V2__customer_details_updation.sql
+    ├── V3__customer_details_inserted.sql
+    ├── V4__customer_upsert.sql
+    ├── V5__create_orders_table.sql
+    ├── V6__insert_orders_data.sql
+    ├── V7__created_cust_order_indexes.sql
+    ├── V8__customer_account_closure.sql
+    └── V9__create_composite_order_index.sql
 ```
 
-The company operates internationally, including **South Africa** and **India**.
+### Important distinction
 
----
-
-# Business Rules
-
-The following business rules apply throughout the exercise.
-
-## Customers
-
-A customer:
-
-- Has a unique customer ID.
-- Has a first name and surname.
-- Has an email address.
-- Has a phone number.
-- Has a country.
-- Has a date of birth.
-- Has a date/time indicating when the record was created.
-- Has a date/time indicating when the record was last changed.
-
-Two different customers can have the same name.
-
-For example, the following are two different people:
-
-```text
-John Smith
-John Smith
+``` text
+mysql-db-lab
+│
+├── flyway.toml
+│
+├── sql/
+│   ├── V1 ... V9       ← versioned Flyway migrations
+│   └── R__...          ← repeatable Flyway migrations
+│
+└── queries/
+    └── *.sql           ← query/reporting/practice SQL
 ```
 
-Do not assume that a person's name uniquely identifies a customer.
+`flyway.toml` is the Flyway configuration file.
 
-The customer's ID is the unique identifier.
+The `sql` folder is the Flyway migration location.
 
----
+The `queries` folder is a separate collection of SQL queries and is
+**not the Flyway migration location**.
 
-## Orders
+------------------------------------------------------------------------
 
-A customer can have zero, one, or many orders.
+# 3. What Flyway Does
 
-Orders are business records and may be required for historical reporting.
+Flyway is a database migration tool.
 
-Therefore, deleting a customer should not casually result in historical order information being lost.
+Instead of manually applying database changes every time, database
+changes are stored as SQL files with a defined naming convention.
 
-The database design should enforce the appropriate relationship between customers and orders.
+### Versioned migration flow
 
----
-
-# Independent Learning
-
-You will encounter topics that may not yet have been covered in class.
-
-When this happens, you are expected to research the topic before implementing it.
-
-You may use:
-
-- Official MySQL documentation
-- Official Flyway documentation
-- Technical books
-- Tutorials
-- Videos
-- Other reliable technical resources
-
-You should understand the SQL that you submit.
-
-If asked to explain your solution, being able to say "the query worked" is not sufficient.
-
----
-
-# Flyway
-
-All **database changes** must be managed through Flyway.
-
-You must learn the difference between:
-
-## Versioned migrations
-
-Used for changes that should happen in a specific order.
-
-Examples:
-
-- Creating a table
-- Adding a column
-- Adding a foreign key
-- Changing a database structure
-- Inserting initial data
-
----
-
-## Repeatable migrations
-
-Used for database objects or other scripts that may need to be reapplied when their contents change.
-
-Examples can include:
-
-- Views
-- Stored procedures
-- Functions
-
-You must research how Flyway determines whether a repeatable migration needs to execute again.
-
----
-
-## Upsert / MERGE concept
-
-You will also investigate how databases handle the following requirement:
-
-> Insert a record when it does not exist, but update it when it already exists.
-
-This is commonly called an **upsert**.
-
-You may encounter the term `MERGE` when researching this topic.
-
-However, do not assume that all database systems implement `MERGE` in the same way.
-
-For MySQL, investigate:
-
-```sql
-INSERT ... ON DUPLICATE KEY UPDATE
+``` text
+V1
+ ↓
+V2
+ ↓
+V3
+ ↓
+...
+ ↓
+V9
 ```
 
-You must understand why the database is able to determine that a record already exists.
+Flyway executes versioned migrations in version order and records their
+status in:
 
----
+``` text
+flyway_schema_history
+```
 
-# Flyway Learning Resources
+The basic process is:
 
-Before starting, learn the basics of Flyway.
+``` text
+Migration file exists
+        ↓
+Flyway detects it
+        ↓
+Pending
+        ↓
+migrate
+        ↓
+Successfully executed
+        ↓
+Recorded in flyway_schema_history
+```
 
-### Video
+------------------------------------------------------------------------
 
-[How to Set Up Flyway On Your Database — Database Star](https://www.youtube.com/watch?v=qsacSRcHCCs)
+# 4. Versioned and Repeatable Migrations
 
-### Official Documentation
+The `sql` folder contains two different Flyway migration types.
 
-[Getting Started with Flyway — Redgate](https://documentation.red-gate.com/flyway/getting-started-with-flyway)
+## 4.1 Versioned migrations
 
-You should understand:
+Versioned migrations use:
 
-- Migration naming
-- Versioned migrations
-- Repeatable migrations
-- Migration ordering
-- Migration history
-- Checksums
-- What happens when a migration has already been executed
-- Why executed versioned migrations should not normally be modified
+``` text
+V<version>__<description>.sql
+```
 
----
+Examples from this project:
 
-# Database
+``` text
+V1__customers_table.sql
+V2__customer_details_updation.sql
+V3__customer_details_inserted.sql
+V4__customer_upsert.sql
+V5__create_orders_table.sql
+V6__insert_orders_data.sql
+V7__created_cust_order_indexes.sql
+V8__customer_account_closure.sql
+V9__create_composite_order_index.sql
+```
 
-Create a database for this exercise.
+Versioned migrations are applied in version order.
 
-Use:
+------------------------------------------------------------------------
 
-```text
+## 4.2 Repeatable migrations
+
+Repeatable migrations use:
+
+``` text
+R__<description>.sql
+```
+
+The project contains:
+
+``` text
+R__create_customer_order.sql
+R__customer_order_history_procedure.sql
+R__customer_reporting_view.sql
+R__customer_summary_procedure.sql
+```
+
+These files are separate from the V1--V9 version sequence.
+
+Their filenames indicate database objects such as a customer/order
+object, procedures, and a reporting view.
+
+> The exact SQL behavior of each repeatable file should be taken from
+> the SQL file itself. This README does not infer implementation details
+> from filenames alone.
+
+------------------------------------------------------------------------
+
+# 5. Database Architecture
+
+The project uses the database:
+
+``` text
 customer_order_management
 ```
 
-All parts of the exercise use this database.
+At a high level, the database contains customer/order data together with
+Flyway's migration history.
 
----
+Conceptually:
 
-# Part 1 — Customer Table
-
-Create the initial `customers` table.
-
-The table must represent the following information:
-
-| Information   | Description                          |
-| ------------- | ------------------------------------ |
-| Customer ID   | Unique identifier                    |
-| First name    | Customer's first name                |
-| Last name     | Customer's surname                   |
-| Email         | Customer's email address             |
-| Phone         | Customer's telephone number          |
-| Country code  | Country associated with the customer |
-| Date of birth | Customer's date of birth             |
-| Created at    | When the record was created          |
-| Updated at    | When the record was last changed     |
-
-## Requirements
-
-Choose appropriate MySQL data types.
-
-You must decide:
-
-- Which column is the primary key.
-- How the primary key is generated.
-- Appropriate string lengths.
-- Appropriate date types.
-- Appropriate date/time types.
-- Which columns should be `NOT NULL`.
-- Which columns may contain `NULL`.
-- Whether any columns should have a default value.
-
-Do not use `VARCHAR(255)` automatically for every string field.
-
-Consider the actual business meaning and expected contents of each column.
-
-## Submission
-
-This is a **Flyway versioned migration**.
-
-Determine the appropriate migration filename yourself based on your Flyway research.
-
----
-
-# Part 2 — Initial Customer Data
-
-Insert the following customers.
-
-The IDs are shown so that the same customers can be identified in later exercises.
-
-Do not assume that the ID should necessarily be manually inserted.
-
-|  ID | First Name | Last Name | Email                                                           | Phone        | Country Code | Date of Birth |
-| --: | ---------- | --------- | --------------------------------------------------------------- | ------------ | ------------ | ------------- |
-|   1 | Aisha      | Naidoo    | [aisha.naidoo@gmail.com](mailto:aisha.naidoo@gmail.com)         | 0825551001   | ZA           | 1992-03-14    |
-|   2 | Daniel     | Mokoena   | [daniel.mokoena@outlook.com](mailto:daniel.mokoena@outlook.com) | 0835551002   | ZA           | 1988-11-02    |
-|   3 | Priya      | Pillay    | [priya.pillay@yahoo.com](mailto:priya.pillay@yahoo.com)         | 0845551003   | ZA           | 1995-07-21    |
-|   4 | Michael    | Dlamini   | [michael.dlamini@gmail.com](mailto:michael.dlamini@gmail.com)   | 0815551004   | ZA           | 1990-01-30    |
-|   5 | Sarah      | Jacobs    | [sarah.jacobs@outlook.com](mailto:sarah.jacobs@outlook.com)     | 0725551005   | ZA           | 1985-09-18    |
-|   6 | Thabo      | Naidoo    | [thabo.naidoo@gmail.com](mailto:thabo.naidoo@gmail.com)         | 0765551006   | ZA           | 1998-12-05    |
-|   7 | Lindiwe    | Mokoena   | [lindiwe.mokoena@yahoo.com](mailto:lindiwe.mokoena@yahoo.com)   | 0795551007   | ZA           | 1993-05-27    |
-|   8 | Arjun      | Patel     | [arjun.patel@gmail.com](mailto:arjun.patel@gmail.com)           | 91985551008  | IN           | 1987-06-11    |
-|   9 | Emily      | Smith     | [emily.smith@outlook.com](mailto:emily.smith@outlook.com)       | 44775551009  | GB           | 1996-10-23    |
-|  10 | Yusuf      | Khan      | [yusuf.khan@gmail.com](mailto:yusuf.khan@gmail.com)             | 971505551010 | AE           | 1991-02-08    |
-|  11 | John       | Smith     | [john.smith@gmail.com](mailto:john.smith@gmail.com)             | 27825551011  | ZA           | 1989-04-16    |
-|  12 | John       | Smith     | [john.smith@outlook.com](mailto:john.smith@outlook.com)         | 91975551012  | IN           | 1994-08-29    |
-
-Notice that customers `11` and `12` have the same first name and last name.
-
-They are **different customers**.
-
-Their customer IDs, email addresses, phone numbers, countries and dates of birth are different.
-
-## Submission
-
-This is a **Flyway versioned migration**.
-
-Determine the migration filename yourself.
-
----
-
-# Part 3 — Update Customer Information
-
-The company has received updated customer information.
-
-You must modify the existing data.
-
-## Task 1 — Email Provider Change
-
-The company has migrated some customers away from Yahoo email addresses.
-
-All customers currently using a Yahoo email address must now use Gmail.
-
-The local part of the email address should remain the same.
-
-For example:
-
-```text
-person@yahoo.com
+``` text
+MySQL Server
+│
+└── Database: customer_order_management
+    │
+    ├── customers
+    │
+    ├── orders
+    │
+    └── flyway_schema_history
 ```
 
-should become:
+Additional database objects are managed through the repeatable
+migrations in `sql/`.
 
-```text
-person@gmail.com
+------------------------------------------------------------------------
+
+# 6. MySQL Port Problem
+
+Initially, the project was trying to use:
+
+``` text
+3305
 ```
 
-### Requirement
+However, the actual MySQL 8.0 Windows service was configured to use:
 
-Identify the affected records using a `SELECT` first.
-
-Your solution must demonstrate the use of:
-
-```sql
-LIKE
+``` text
+3306
 ```
 
-Do not manually update each customer by ID.
+The MySQL Windows service was:
 
----
-
-## Task 2 — Customer Contact Update
-
-Aisha Naidoo has provided a new phone number:
-
-```text
-0825552001
+``` text
+MySQL80
 ```
 
-Update her customer record.
+The MySQL configuration contained:
 
----
-
-## Task 3 — Customer Name Correction
-
-Customer `3` has corrected her surname.
-
-Her surname should now be:
-
-```text
-Pillay-Singh
+``` text
+port=3306
 ```
 
-Update the appropriate customer.
+The server was verified using:
 
----
-
-## Task 4 — Same Name, Different Customers
-
-There are two customers called:
-
-```text
-John Smith
+``` cmd
+netstat -ano | findstr :3306
 ```
 
-One lives in South Africa and one lives in India.
+Inside MySQL, the port was confirmed using:
 
-The South African customer has provided a new phone number:
-
-```text
-0825552011
+``` sql
+SHOW VARIABLES LIKE 'port';
 ```
 
-The Indian customer has provided a new phone number:
+Expected result:
 
-```text
-91975552012
+``` text
+3306
 ```
 
-Update both customers correctly.
+### Final connection
 
-### Important
-
-Do not identify the customers using only:
-
-```text
-first_name
-last_name
+``` text
+Host: 127.0.0.1
+Port: 3306
+User: root
 ```
 
-The database contains two different people with the same name.
+------------------------------------------------------------------------
 
-Use an appropriate unique identifier or combination of information to identify the correct customer.
+# 7. Root Password Problem
 
----
+At one point:
 
-## Task 5 — Investigate `updated_at`
+``` cmd
+mysql -u root -p
+```
 
-Before executing your updates, inspect the table definition and the existing data.
+returned:
 
-Determine how the `updated_at` field is intended to behave.
+``` text
+ERROR 1045 (28000): Access denied for user 'root'@'localhost'
+```
 
-When customer information changes, the record's modification timestamp should accurately reflect that change.
+The root password therefore had to be reset.
 
-Implement the update accordingly.
+## Security rule
 
-Do not simply ignore `updated_at`.
+Never put the real MySQL password in this README or commit it to GitHub.
 
-The requirement is deliberately not giving you the exact SQL mechanism to use.
+Use:
 
-Research the available MySQL options and decide what is appropriate.
+``` text
+YOUR_MYSQL_PASSWORD
+```
 
----
+as a placeholder.
 
-## Submission
+For a real project, use a secure credential-management approach rather
+than storing credentials in source control.
 
-All changes in this part must be represented by an appropriate **Flyway migration**.
+------------------------------------------------------------------------
 
-Do not modify the migration that originally inserted the customers.
+# 8. Root Password Reset
 
----
+The Windows `--skip-grant-tables` method caused MySQL startup problems,
+so that approach was abandoned.
 
-# Part 4 — Customer Upsert
+The working method was the MySQL `--init-file` method.
 
-The company receives customer information from an external system every night.
+A temporary file was created:
 
-The incoming data may contain:
+``` text
+C:\mysql-init.txt
+```
 
-- Existing customers with changed information.
-- Completely new customers.
+It contained an `ALTER USER` command to set a new root password.
 
-The import process should not create duplicate records when a customer already exists.
+MySQL was started manually with:
 
-Research the MySQL **upsert** pattern.
+``` cmd
+"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqld.exe" --defaults-file="C:\ProgramData\MySQL\MySQL Server 8.0\my.ini" --init-file=C:\\mysql-init.txt --console
+```
 
-The external system sends the following records:
+The server successfully reported that it was ready for connections on
+port `3306`.
 
-| Customer ID | First Name | Last Name    | Email                                                           | Phone       | Country Code |
-| ----------: | ---------- | ------------ | --------------------------------------------------------------- | ----------- | ------------ |
-|           3 | Priya      | Pillay-Singh | [priya.pillay@gmail.com](mailto:priya.pillay@gmail.com)         | 0845553003  | ZA           |
-|          11 | John       | Smith        | [john.smith@gmail.com](mailto:john.smith@gmail.com)             | 0825553011  | ZA           |
-|          13 | Kavita     | Reddy        | [kavita.reddy@gmail.com](mailto:kavita.reddy@gmail.com)         | 91985553013 | IN           |
-|          14 | James      | Williams     | [james.williams@outlook.com](mailto:james.williams@outlook.com) | 14155553014 | US           |
+A second CMD window tested:
 
-The operation must result in:
+``` cmd
+mysql -u root -p
+```
 
-- Existing customer information being updated where appropriate.
-- New customers being inserted.
-- Existing customers not being duplicated.
+The login succeeded.
 
-Research and use the MySQL mechanism appropriate for this requirement.
+After the reset:
 
-## Submission
+``` cmd
+del C:\mysql-init.txt
+```
 
-This should be implemented as a **Flyway migration**.
+The normal Windows service was started:
 
-Consider carefully whether this migration should be **versioned or repeatable**, and be prepared to explain your decision.
+``` cmd
+net start MySQL80
+```
 
----
+Normal login was tested again:
 
-# Part 5 — Customer Queries
+``` cmd
+mysql -u root -p
+```
 
-The customer service department needs to retrieve customer information.
+This confirmed that the normal MySQL service was working.
 
-Create read-only SQL queries to answer the following questions.
+------------------------------------------------------------------------
 
-These are **query exercises**, not database migrations.
+# 9. MySQL Workbench Configuration
 
-Place the queries in an appropriate SQL file in your submission.
+The old Workbench connection used port `3305`.
 
-## Customer Service Queries
+It was changed to:
 
-### 1. Customer directory
+``` text
+Connection Method: Standard (TCP/IP)
+Hostname: 127.0.0.1
+Port: 3306
+Username: root
+Password: New MySQL password
+```
 
-Display all customers with:
+The **Test Connection** operation succeeded.
 
-- First name
-- Last name
-- Email
-- Country code
+Therefore Workbench connects to:
 
----
+``` text
+127.0.0.1:3306
+```
 
-### 2. South African customers
+------------------------------------------------------------------------
 
-Display all customers whose country is South Africa.
+# 10. Flyway Installation
 
----
+Flyway Community Edition 13.7.0 was installed at:
 
-### 3. Indian customers
+``` text
+D:\flyway\flyway-13.7.0
+```
 
-Display all customers whose country is India.
+The executable is:
 
----
+``` text
+D:\flyway\flyway-13.7.0\flyway.cmd
+```
 
-### 4. Gmail customers
+Because the Flyway folder was not initially available through PATH, the
+full executable path was used.
 
-The marketing department wants to identify customers using Gmail.
+------------------------------------------------------------------------
 
-Find all customers whose email address uses Gmail.
+# 11. Finding flyway.toml
 
----
+An incorrect path was initially used:
 
-### 5. Outlook customers
+``` text
+D:\mysql-db-lab\sql\flyway.toml
+```
 
-Find all customers whose email address uses Outlook.
+The actual configuration file is:
 
----
+``` text
+D:\mysql-db-lab\flyway.toml
+```
 
-### 6. Customers with the surname Naidoo
+The location was found using:
 
-Find all customers whose surname is `Naidoo`.
+``` cmd
+dir D:\mysql-db-lab /s /b | findstr /i "flyway.toml"
+```
 
----
+### Correct distinction
 
-### 7. Customers born in the 1990s
+``` text
+D:\mysql-db-lab\flyway.toml
+        ↑
+        Configuration
 
-Find all customers whose date of birth falls between:
+D:\mysql-db-lab\sql\
+        ↑
+        Flyway migrations
+```
 
-```text
-1990-01-01
+------------------------------------------------------------------------
+
+# 12. Final Flyway Configuration
+
+The working configuration follows this structure:
+
+``` toml
+[flyway]
+locations = ["filesystem:D:/mysql-db-lab/sql"]
+
+[environments.local]
+url = "jdbc:mysql://127.0.0.1:3306/customer_order_management?allowPublicKeyRetrieval=true&useSSL=false"
+user = "root"
+password = "YOUR_MYSQL_PASSWORD"
+```
+
+## `[flyway]`
+
+``` toml
+[flyway]
+```
+
+Starts the main Flyway configuration section.
+
+## `locations`
+
+``` toml
+locations = ["filesystem:D:/mysql-db-lab/sql"]
+```
+
+Tells Flyway where the migration files are located.
+
+This points to:
+
+``` text
+D:\mysql-db-lab\sql
+```
+
+Therefore Flyway scans the `sql` folder for both versioned and
+repeatable migration files.
+
+## `[environments.local]`
+
+``` toml
+[environments.local]
+```
+
+Defines settings for the environment named:
+
+``` text
+local
+```
+
+The commands therefore use:
+
+``` text
+-environment=local
+```
+
+## JDBC URL
+
+``` toml
+url = "jdbc:mysql://127.0.0.1:3306/customer_order_management?allowPublicKeyRetrieval=true&useSSL=false"
+```
+
+Breakdown:
+
+``` text
+jdbc:mysql://
+```
+
+Use the MySQL JDBC connection.
+
+``` text
+127.0.0.1
+```
+
+The MySQL server is running on the same computer.
+
+``` text
+3306
+```
+
+The MySQL server port.
+
+``` text
+customer_order_management
+```
+
+The database name.
+
+``` text
+allowPublicKeyRetrieval=true
+```
+
+Allows the JDBC driver to retrieve the MySQL RSA public key when
+required for authentication.
+
+``` text
+useSSL=false
+```
+
+Disables SSL for this local development connection.
+
+### User
+
+``` toml
+user = "root"
+```
+
+The MySQL username.
+
+### Password
+
+``` toml
+password = "YOUR_MYSQL_PASSWORD"
+```
+
+The password used by Flyway.
+
+Do not commit the real password to GitHub.
+
+------------------------------------------------------------------------
+
+# 13. First Flyway Connection Test
+
+The main status command is:
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local info
+```
+
+Initially Flyway attempted:
+
+``` text
+127.0.0.1:3305
+```
+
+and failed with:
+
+``` text
+Connection refused
+```
+
+### Cause
+
+The configuration was still using the old MySQL port.
+
+### Fix
+
+Change:
+
+``` text
+3305
+```
+
+to:
+
+``` text
+3306
+```
+
+------------------------------------------------------------------------
+
+# 14. Flyway Authentication Error
+
+After fixing the port, Flyway reported:
+
+``` text
+Access denied for user 'root'@'localhost'
+(using password: NO)
+```
+
+### Meaning
+
+Flyway had:
+
+``` text
+user = root
+```
+
+but did not have a password configured.
+
+### Fix
+
+Add the password to the local environment:
+
+``` toml
+password = "YOUR_MYSQL_PASSWORD"
+```
+
+After this, Flyway successfully authenticated with MySQL.
+
+------------------------------------------------------------------------
+
+# 15. Database Not Found
+
+Flyway then reported:
+
+``` text
+Unknown database 'customer_order_management'
+```
+
+### Cause
+
+The selected MySQL server did not contain the project database.
+
+The database was created in MySQL Workbench:
+
+``` sql
+CREATE DATABASE customer_order_management;
+```
+
+It was verified using:
+
+``` sql
+SHOW DATABASES;
+```
+
+------------------------------------------------------------------------
+
+# 16. Initial Migration History
+
+The first version of the project contained three migrations:
+
+``` text
+V1
+V2
+V3
+```
+
+Flyway detected them as pending.
+
+`Pending` means:
+
+> Flyway found the migration file, but it has not successfully executed
+> it yet.
+
+It does not automatically mean that the migration contains an error.
+
+------------------------------------------------------------------------
+
+# 17. First Migration Attempt
+
+The migration command was:
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local migrate
+```
+
+V1 successfully executed.
+
+Then V2 failed with:
+
+``` text
+Unknown database 'customers'
+```
+
+------------------------------------------------------------------------
+
+# 18. Why V2 Failed
+
+The first statement in the original V2 migration was:
+
+``` sql
+USE customers;
+```
+
+This was incorrect because:
+
+``` text
+Database:
+customer_order_management
 ```
 
 and:
 
-```text
-1999-12-31
+``` text
+Table:
+customers
 ```
 
----
+are different objects.
 
-### 8. Customers matching multiple conditions
+The correct statement is:
 
-Find customers who:
-
-- Are from South Africa
-- And use Gmail
-
----
-
-# Part 6 — Customer and Order Relationship
-
-The company now needs to track orders.
-
-Create an `orders` table.
-
-An order represents a purchase made by a customer.
-
-The order must contain:
-
-- Order ID
-- Customer ID
-- Order date
-- Order amount
-- Order status
-- Created timestamp
-- Updated timestamp
-
-## Business Requirements
-
-### Requirement 1
-
-Every order must belong to an existing customer.
-
-An order must not reference a customer that does not exist.
-
-### Requirement 2
-
-A customer may have multiple orders.
-
-### Requirement 3
-
-A customer may have no orders.
-
-### Requirement 4
-
-Historical orders are important to the company.
-
-If a customer account is closed, the company still needs the customer's order history for reporting and auditing.
-
-Therefore, the database must not casually delete historical orders when a customer is removed.
-
-### Requirement 5
-
-An order amount cannot represent a negative purchase value.
-
-### Requirement 6
-
-An order must have an order date.
-
-### Requirement 7
-
-The order status must represent a valid business state.
-
-Possible states initially include:
-
-```text
-PENDING
-COMPLETED
-CANCELLED
+``` sql
+USE customer_order_management;
 ```
 
-Research which MySQL constraints are appropriate for enforcing these requirements.
+Then the table can be accessed with:
 
-## Submission
-
-This is a **Flyway versioned migration**.
-
----
-
-# Part 7 — Order Data
-
-Insert the following orders.
-
-| Order ID | Customer ID | Order Date |  Amount | Status    |
-| -------: | ----------: | ---------- | ------: | --------- |
-|     1001 |           1 | 2026-01-10 | 1250.00 | COMPLETED |
-|     1002 |           2 | 2026-01-15 |  850.50 | COMPLETED |
-|     1003 |           1 | 2026-02-02 |  450.00 | PENDING   |
-|     1004 |           3 | 2026-02-10 | 2100.00 | COMPLETED |
-|     1005 |           5 | 2026-02-14 |  675.25 | CANCELLED |
-|     1006 |           7 | 2026-02-20 | 1500.00 | COMPLETED |
-|     1007 |           4 | 2026-03-01 |  925.75 | PENDING   |
-|     1008 |           8 | 2026-03-04 | 3200.00 | COMPLETED |
-|     1009 |           2 | 2026-03-10 |  400.00 | COMPLETED |
-|     1010 |           9 | 2026-03-15 |  775.50 | PENDING   |
-|     1011 |           6 | 2026-03-20 | 1100.00 | COMPLETED |
-|     1012 |          10 | 2026-03-25 | 2500.00 | COMPLETED |
-|     1013 |           1 | 2026-04-01 |  300.00 | CANCELLED |
-|     1014 |           7 | 2026-04-05 |  950.00 | PENDING   |
-|     1015 |           3 | 2026-04-10 | 1800.00 | COMPLETED |
-
-## Submission
-
-This is a **Flyway migration**.
-
----
-
-# Part 8 — Customer Order Reports
-
-The customer service department now needs information from both tables.
-
-These are **read-only query exercises**.
-
-They should not be implemented as Flyway migrations.
-
-## Query 1 — Customer Order History
-
-Display:
-
-- Customer first name
-- Customer last name
-- Order ID
-- Order date
-- Order amount
-- Order status
-
-Only customers who have orders should appear.
-
----
-
-## Query 2 — All Customers
-
-The customer service department wants a list of all customers, including customers who have never placed an order.
-
-Display:
-
-- Customer ID
-- First name
-- Last name
-- Order ID
-- Order date
-- Order amount
-
-Customers without orders must still appear.
-
----
-
-## Query 3 — Customer Spending
-
-The finance department wants to see how much each customer has spent.
-
-Display:
-
-- Customer ID
-- Customer name
-- Total completed order value
-
-Customers who have never completed an order should still be represented.
-
----
-
-## Query 4 — Pending Orders
-
-The operations team wants a list of pending orders.
-
-Display:
-
-- Order ID
-- Customer name
-- Customer country
-- Order date
-- Order amount
-
-Only pending orders should appear.
-
----
-
-## Query 5 — High-Value Orders
-
-Management wants to review orders worth more than `1000`.
-
-Display:
-
-- Order ID
-- Customer name
-- Order amount
-- Order status
-
----
-
-# Part 9 — Sorting
-
-The customer service team needs different ways to view customer information.
-
-Write queries to:
-
-1. Sort customers alphabetically by surname.
-2. Sort customers by first name and then surname.
-3. Display the newest customers first.
-4. Display customers from South Africa first.
-5. Display orders from highest amount to lowest amount.
-6. Display orders by order date, newest first.
-
-Use appropriate:
-
-```sql
-ORDER BY
-ASC
-DESC
+``` sql
+SELECT * FROM customers;
 ```
 
----
+------------------------------------------------------------------------
 
-# Part 10 — Aggregation and Business Reporting
+# 19. Correcting V2
 
-Management wants summary information rather than individual records.
+V2 was changed from:
 
-Create queries to determine:
-
-### Customer statistics
-
-- Total number of customers.
-- Number of customers per country.
-- Number of customers using Gmail.
-- Number of customers using Outlook.
-
-### Order statistics
-
-- Total number of orders.
-- Total value of all orders.
-- Total value of completed orders.
-- Average order value.
-- Largest order.
-- Smallest order.
-
-### Customer-level statistics
-
-Determine:
-
-- Number of orders per customer.
-- Total completed order value per customer.
-- Average order value per customer.
-
-Use appropriate:
-
-```text
-COUNT
-SUM
-AVG
-MIN
-MAX
-GROUP BY
-HAVING
+``` sql
+USE customers;
 ```
 
----
+to:
 
-# Part 11 — Indexes
-
-The system is now receiving thousands of customers and orders.
-
-The following queries are executed frequently:
-
-1. Find a customer by email.
-2. Find all orders belonging to a customer.
-3. Find orders by status.
-4. Find orders within a date range.
-
-Research which indexes may be appropriate.
-
-Create the required indexes.
-
-You must be able to explain why each index exists.
-
-Also investigate:
-
-```sql
-EXPLAIN
+``` sql
+USE customer_order_management;
 ```
 
-Use it to inspect relevant queries.
+The rest of the V2 migration could then operate on the `customers`
+table.
 
----
+------------------------------------------------------------------------
 
-# Part 12 — Customer Account Closure
+# 20. Why Migrate Failed Again
 
-A customer requests that their account be closed.
+After V2 had failed once, running `migrate` again produced a
+failed-migration validation error.
 
-The customer has existing orders.
+Flyway records migration execution in:
 
-The company needs to preserve historical order information.
-
-Determine an appropriate database design and operation for closing the account.
-
-Consider:
-
-- Foreign keys
-- Referential integrity
-- `DELETE`
-- Soft deletion
-- Customer status
-- Historical reporting
-
-Implement the solution you determine is appropriate.
-
-Explain your decision in a short comment or documentation file.
-
----
-
-# Part 13 — Repeatable Migration: Customer Reporting View
-
-The finance department frequently needs a summary of customer order activity.
-
-Create a database view containing useful information such as:
-
-- Customer ID
-- Customer name
-- Country
-- Number of orders
-- Total completed order value
-
-The view should be maintained using a **Flyway repeatable migration**.
-
-Research how repeatable migrations work.
-
-Then modify the view definition.
-
-Run Flyway again and observe what happens.
-
-You should understand why Flyway knows that the repeatable migration has changed.
-
----
-
-# Part 14 — Stored Procedure: Customer Order History
-
-The customer service application frequently requests a customer's order history.
-
-Create a stored procedure that accepts a customer ID.
-
-The procedure should return the customer's:
-
-- Customer ID
-- First name
-- Last name
-- Email
-- Order ID
-- Order date
-- Order amount
-- Order status
-
-The procedure should work for customers with:
-
-- Multiple orders.
-- One order.
-- No orders.
-
-Research MySQL stored procedure syntax before implementing it.
-
-## Flyway
-
-The stored procedure must be managed through Flyway.
-
-Determine whether a stored procedure is better represented as a versioned or repeatable migration, and explain your choice.
-
----
-
-# Part 15 — Stored Procedure: Create Customer Order
-
-The application needs a database operation for creating a new order.
-
-Create a stored procedure that accepts the information required to create an order.
-
-The procedure should:
-
-1. Verify that the customer exists.
-2. Validate the order information.
-3. Create the order.
-4. Set the appropriate timestamps.
-5. Return useful information about the newly created order.
-
-Research how MySQL stored procedures can:
-
-- Accept parameters.
-- Use variables.
-- Perform conditional logic.
-- Handle errors.
-
----
-
-# Part 16 — Stored Procedure: Customer Summary
-
-Management wants to request a summary for a specific customer.
-
-Create a stored procedure that accepts a customer ID and returns:
-
-- Customer name.
-- Country.
-- Number of orders.
-- Number of completed orders.
-- Total completed order value.
-- Average completed order value.
-- Most recent order date.
-
-Customers without orders must be handled correctly.
-
----
-
-# Part 17 — Transactions
-
-The order creation process now has more than one database operation.
-
-Research MySQL transactions.
-
-Investigate:
-
-```sql
-START TRANSACTION
-COMMIT
-ROLLBACK
+``` text
+flyway_schema_history
 ```
 
-Design an exercise where an order operation must either complete fully or leave the database unchanged.
+Because V2 had failed, Flyway knew there was a failed migration.
 
-Consider what should happen if:
+The migration history therefore had to be repaired before trying again.
 
-- The customer does not exist.
-- The order contains an invalid amount.
-- An error occurs while creating the order.
+------------------------------------------------------------------------
 
----
+# 21. Flyway Repair
 
-# Part 18 — Advanced SQL
+The repair command was:
 
-Continue extending the system as additional SQL concepts are introduced.
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local repair
+```
 
-Possible future topics include:
+### What `repair` means
 
-## Subqueries
+`repair` fixes Flyway's recorded migration history after a failed
+migration.
 
-Answer questions such as:
+It does **not** execute the migration.
 
-- Which customers have placed orders above the average order value?
-- Which customers have spent more than the average customer?
+The normal recovery sequence is:
 
-## Common Table Expressions
+``` text
+Fix SQL
+   ↓
+repair
+   ↓
+migrate
+   ↓
+info
+```
+
+Do not use `repair` as a replacement for `migrate`.
+
+------------------------------------------------------------------------
+
+# 22. Migration History --- V1 to V9
+
+The final repository contains nine versioned migrations.
+
+  Version   File                                     Role indicated by filename
+  --------- ---------------------------------------- ----------------------------
+  V1        `V1__customers_table.sql`                Customers table
+  V2        `V2__customer_details_updation.sql`      Customer details update
+  V3        `V3__customer_details_inserted.sql`      Customer data insertion
+  V4        `V4__customer_upsert.sql`                Customer upsert
+  V5        `V5__create_orders_table.sql`            Orders table creation
+  V6        `V6__insert_orders_data.sql`             Orders data insertion
+  V7        `V7__created_cust_order_indexes.sql`     Customer/order indexes
+  V8        `V8__customer_account_closure.sql`       Customer account closure
+  V9        `V9__create_composite_order_index.sql`   Composite order index
+
+> The descriptions above are based on the actual migration filenames in
+> the final repository. The README does not infer additional SQL
+> behavior that is not established by the available source material.
+
+------------------------------------------------------------------------
+
+# 23. V1 --- Customers Table
+
+Migration:
+
+``` text
+V1__customers_table.sql
+```
+
+The customer table includes the customer information used by the
+project.
+
+The documented structure includes fields such as:
+
+``` text
+customer_id
+first_name
+last_name
+email
+phone
+country_code
+date_of_birth
+created_at
+updated_at
+```
+
+The primary customer identifier is:
+
+``` text
+customer_id
+```
+
+The customer table is the foundation for later customer/order
+operations.
+
+------------------------------------------------------------------------
+
+# 24. V2 --- Customer Details Updation
+
+Migration:
+
+``` text
+V2__customer_details_updation.sql
+```
+
+This migration updates the customer details structure/data.
+
+The major troubleshooting issue encountered with V2 was the incorrect:
+
+``` sql
+USE customers;
+```
+
+which was corrected to:
+
+``` sql
+USE customer_order_management;
+```
+
+This was an important database-versus-table naming lesson.
+
+------------------------------------------------------------------------
+
+# 25. V3 --- Customer Details Inserted
+
+Migration:
+
+``` text
+V3__customer_details_inserted.sql
+```
+
+This migration inserts customer data into the project.
+
+After the V2 problem was corrected and the failed migration history was
+repaired, V2 and V3 were successfully applied.
+
+------------------------------------------------------------------------
+
+# 26. V4 --- Customer Upsert
+
+Migration:
+
+``` text
+V4__customer_upsert.sql
+```
+
+This migration is the project's customer upsert migration.
+
+The project history also included a migration validation/checksum
+problem around V4.
+
+When an already-applied migration is modified, Flyway can detect that
+the migration checksum no longer matches the checksum stored in
+migration history.
+
+The important rule is:
+
+``` text
+Do not casually edit an already-applied migration.
+```
+
+For new database changes, create a new versioned migration instead.
+
+------------------------------------------------------------------------
+
+# 27. V5 --- Create Orders Table
+
+Migration:
+
+``` text
+V5__create_orders_table.sql
+```
+
+This migration creates the orders table.
+
+The documented order table structure includes:
+
+``` text
+order_id
+customer_id
+order_date
+order_amount
+order_status
+created_at
+updated_at
+```
+
+The documented rules include:
+
+-   `order_id` as the primary key
+-   Auto-increment order identifier
+-   Customer relationship through `customer_id`
+-   Decimal order amount
+-   Non-negative order amount check
+-   Order status values including:
+    -   `PENDING`
+    -   `COMPLETED`
+    -   `CANCELLED`
+-   Timestamp fields
+
+The project also encountered a table-already-exists situation during the
+V5 migration work, which required understanding the existing database
+state before continuing.
+
+------------------------------------------------------------------------
+
+# 28. V6 --- Insert Orders Data
+
+Migration:
+
+``` text
+V6__insert_orders_data.sql
+```
+
+This migration inserts order data.
+
+The project history included a duplicate-key error during the V6
+migration attempt.
+
+The important troubleshooting lesson is:
+
+``` text
+Before rerunning an INSERT migration,
+check whether some or all of the rows were already inserted.
+```
+
+A failed migration does not automatically mean that no data was changed.
+
+------------------------------------------------------------------------
+
+# 29. V7 --- Customer/Order Indexes
+
+Migration:
+
+``` text
+V7__created_cust_order_indexes.sql
+```
+
+The filename indicates that this migration creates indexes related to
+customer/order data.
+
+The repository also contains:
+
+``` text
+queries/indexes_explain.sql
+```
+
+which is part of the separate query collection.
+
+For exact index definitions, refer to the V7 SQL file itself.
+
+------------------------------------------------------------------------
+
+# 30. V8 --- Customer Account Closure
+
+Migration:
+
+``` text
+V8__customer_account_closure.sql
+```
+
+The filename indicates that this migration contains the customer account
+closure database change.
+
+For the exact SQL behavior and affected columns/objects, refer directly
+to the migration file.
+
+------------------------------------------------------------------------
+
+# 31. V9 --- Composite Order Index
+
+Migration:
+
+``` text
+V9__create_composite_order_index.sql
+```
+
+The filename indicates that this migration creates a composite index
+related to orders.
+
+For the exact indexed columns and definition, refer directly to the V9
+SQL file.
+
+------------------------------------------------------------------------
+
+# 32. Repeatable Migrations in the Final Project
+
+The `sql` directory also contains four repeatable migrations:
+
+``` text
+R__create_customer_order.sql
+R__customer_order_history_procedure.sql
+R__customer_reporting_view.sql
+R__customer_summary_procedure.sql
+```
+
+These are different from the numbered V1--V9 migrations.
+
+### Versioned migrations
+
+``` text
+V1 → V2 → ... → V9
+```
+
+### Repeatable migrations
+
+``` text
+R__...
+```
+
+Repeatable migrations are identified by the `R__` prefix.
+
+The project uses them for database objects indicated by their filenames,
+including procedures and a reporting view.
+
+------------------------------------------------------------------------
+
+# 33. Queries Folder
+
+The project deliberately separates general SQL queries from Flyway
+migration files.
+
+The final `queries` directory contains:
+
+``` text
+queries/
+│
+├── Advanced_Sql.sql
+├── Aggregation_and_Business_Reporting.sql
+├── customer_order_queries.sql
+├── customer_service_queries.sql
+├── Customer_Summary.sql
+├── indexes_explain.sql
+├── Procedure_Queries.sql
+├── Sorting_Queries.sql
+└── Transactions_Queries.sql
+```
+
+These files are not part of the V1--V9 migration sequence.
+
+They are organized SQL work for querying, analysis, reporting, database
+concepts, and practice.
+
+------------------------------------------------------------------------
+
+# 34. Customer Order Queries
+
+The project includes a dedicated:
+
+``` text
+customer_order_queries.sql
+```
+
+file.
+
+The reporting work covers customer/order-related queries such as:
+
+-   Customer order history
+-   Customers including customers with no orders
+-   Customer spending
+-   Pending orders with customer information
+-   High-value order analysis
+
+These are read/query operations and should be kept separate from
+schema-changing Flyway migrations unless they are intentionally being
+created as database objects through a migration.
+
+------------------------------------------------------------------------
+
+# 35. Aggregation and Business Reporting
+
+The project contains:
+
+``` text
+Aggregation_and_Business_Reporting.sql
+```
+
+This file belongs to the `queries` directory.
+
+It is separate from Flyway's migration files and is used for SQL
+aggregation and business-reporting work.
+
+------------------------------------------------------------------------
+
+# 36. Advanced SQL
+
+The project contains:
+
+``` text
+Advanced_Sql.sql
+```
+
+This is part of the query collection.
+
+It is not a numbered Flyway migration.
+
+------------------------------------------------------------------------
+
+# 37. Sorting Queries
+
+The project contains:
+
+``` text
+Sorting_Queries.sql
+```
+
+This is used for sorting-related SQL practice/query work.
+
+It is stored under:
+
+``` text
+queries/
+```
+
+rather than:
+
+``` text
+sql/
+```
+
+------------------------------------------------------------------------
+
+# 38. Transaction Queries
+
+The project contains:
+
+``` text
+Transactions_Queries.sql
+```
+
+This file is part of the SQL query collection for transaction-related
+work.
+
+------------------------------------------------------------------------
+
+# 39. Procedure Queries
+
+The project contains:
+
+``` text
+Procedure_Queries.sql
+```
+
+This is the query/practice-side procedure file.
+
+The repository also contains repeatable Flyway procedure migrations in
+`sql/`, such as:
+
+``` text
+R__customer_order_history_procedure.sql
+R__customer_summary_procedure.sql
+```
+
+These two uses should not be confused:
+
+``` text
+queries/
+    Procedure_Queries.sql
+        ↓
+    Query/practice collection
+
+sql/
+    R__...procedure.sql
+        ↓
+    Flyway-managed repeatable database object
+```
+
+------------------------------------------------------------------------
+
+# 40. Customer Summary
+
+The project contains:
+
+``` text
+Customer_Summary.sql
+```
+
+under:
+
+``` text
+queries/
+```
+
+It is part of the query/reporting collection.
+
+The project also contains:
+
+``` text
+R__customer_summary_procedure.sql
+```
+
+under:
+
+``` text
+sql/
+```
+
+The two files should be treated according to their respective folders
+and Flyway naming conventions.
+
+------------------------------------------------------------------------
+
+# 41. Index Explanation
+
+The project contains:
+
+``` text
+indexes_explain.sql
+```
+
+under:
+
+``` text
+queries/
+```
+
+This is separate from the actual index migrations:
+
+``` text
+V7__created_cust_order_indexes.sql
+V9__create_composite_order_index.sql
+```
+
+The query file can be used to inspect/explain index-related SQL
+behavior, while the V7/V9 files belong to the Flyway migration history.
+
+------------------------------------------------------------------------
+
+# 42. Customer Service Queries
+
+The project contains:
+
+``` text
+customer_service_queries.sql
+```
+
+under:
+
+``` text
+queries/
+```
+
+This file is part of the separate query collection.
+
+------------------------------------------------------------------------
+
+# 43. MySQL Workbench Verification
+
+Connect to:
+
+``` text
+127.0.0.1:3306
+```
+
+Select:
+
+``` sql
+USE customer_order_management;
+```
+
+Check tables:
+
+``` sql
+SHOW TABLES;
+```
+
+Check customer data:
+
+``` sql
+SELECT * FROM customers;
+```
+
+Check order data:
+
+``` sql
+SELECT * FROM orders;
+```
+
+Check Flyway history:
+
+``` sql
+SELECT * FROM flyway_schema_history;
+```
+
+The `flyway_schema_history` table is the primary place to inspect
+Flyway's recorded migration history.
+
+------------------------------------------------------------------------
+
+# 44. Database vs Table --- Important Beginner Concept
+
+One of the main V2 problems came from confusing a database with a table.
+
+Think of the structure as:
+
+``` text
+MySQL Server
+│
+└── Database: customer_order_management
+    │
+    ├── Table: customers
+    │
+    ├── Table: orders
+    │
+    └── Table: flyway_schema_history
+```
+
+Therefore:
+
+### Correct
+
+``` sql
+USE customer_order_management;
+```
+
+Then:
+
+``` sql
+SELECT * FROM customers;
+```
+
+### Incorrect
+
+``` sql
+USE customers;
+```
+
+because `customers` is a table, not the database.
+
+------------------------------------------------------------------------
+
+# 45. Flyway Migration Commands
+
+## Check migration status
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local info
+```
+
+Use this to see:
+
+-   Current schema version
+-   Applied migrations
+-   Pending migrations
+-   Failed migrations
+-   Repeatable migration information
+
+------------------------------------------------------------------------
+
+## Apply migrations
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local migrate
+```
+
+Use this to execute pending Flyway migrations.
+
+------------------------------------------------------------------------
+
+## Repair migration history
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local repair
+```
+
+Use this when Flyway reports a failed migration or a migration-history
+problem that requires repair.
+
+Always understand and correct the underlying SQL/database problem before
+using `repair`.
+
+------------------------------------------------------------------------
+
+# 46. Adding a New Versioned Migration
+
+The current versioned migrations end at:
+
+``` text
+V9
+```
+
+Therefore the next versioned migration should normally be:
+
+``` text
+V10__<description>.sql
+```
+
+Example:
+
+``` text
+V10__add_customer_status.sql
+```
+
+Place it in:
+
+``` text
+D:\mysql-db-lab\sql
+```
+
+Example:
+
+``` sql
+USE customer_order_management;
+
+ALTER TABLE customers
+ADD COLUMN status VARCHAR(20);
+```
+
+Check the migration:
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local info
+```
+
+The new migration should appear as:
+
+``` text
+Pending
+```
+
+Then run:
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local migrate
+```
+
+------------------------------------------------------------------------
+
+# 47. Adding a Repeatable Migration
+
+Repeatable migrations use:
+
+``` text
+R__<description>.sql
+```
+
+Example:
+
+``` text
+R__customer_reporting_view.sql
+```
+
+The current project already contains repeatable migration files for
+database objects.
+
+Use a repeatable migration when the database object is intended to be
+managed as a repeatable Flyway object rather than as a numbered schema
+change.
+
+The exact SQL object should be defined inside the file.
+
+------------------------------------------------------------------------
+
+# 48. Migration Naming Convention
+
+## Versioned
+
+``` text
+V<version>__<description>.sql
+```
+
+Examples:
+
+``` text
+V1__customers_table.sql
+V5__create_orders_table.sql
+V9__create_composite_order_index.sql
+```
+
+There are **two underscores** between the version and description:
+
+``` text
+V9__create
+   ^^
+```
+
+## Repeatable
+
+``` text
+R__<description>.sql
+```
+
+Examples:
+
+``` text
+R__customer_reporting_view.sql
+R__customer_summary_procedure.sql
+```
+
+------------------------------------------------------------------------
+
+# 49. Important Flyway Rules
+
+## Rule 1 --- Do not manually change migration status
+
+Do not manually edit:
+
+``` text
+Pending
+Success
+Failed
+```
+
+Flyway manages migration status through:
+
+``` text
+flyway_schema_history
+```
+
+------------------------------------------------------------------------
+
+## Rule 2 --- Do not delete flyway_schema_history unnecessarily
+
+If a migration fails:
+
+1.  Read the error.
+2.  Identify the database/SQL problem.
+3.  Correct the problem.
+4.  Use `repair` if Flyway requires it.
+5.  Run `migrate`.
+6.  Verify with `info`.
+
+------------------------------------------------------------------------
+
+## Rule 3 --- Be careful changing applied migrations
+
+Once a versioned migration has successfully executed, changing its
+contents can cause checksum validation problems.
+
+Normally, create a new migration:
+
+``` text
+V10__...
+```
+
+instead of modifying an already-applied:
+
+``` text
+V9__...
+```
+
+------------------------------------------------------------------------
+
+## Rule 4 --- Protect passwords
+
+Never commit a real MySQL password to GitHub.
 
 Use:
 
-```sql
-WITH
+-   Environment variables
+-   Secure secrets
+-   Credential-management solutions
+
+for real deployments.
+
+------------------------------------------------------------------------
+
+## Rule 5 --- Keep query files separate
+
+Do not place general reporting/practice queries into the Flyway
+migration folder unless they are intentionally part of a database
+migration.
+
+Use:
+
+``` text
+queries/
 ```
 
-to simplify more complex reporting queries.
+for general query work.
 
-## CASE
+Use:
 
-Classify customers or orders into business categories.
-
-For example:
-
-```text
-High Value
-Medium Value
-Low Value
+``` text
+sql/
 ```
 
-The actual thresholds should be defined as part of the business requirement.
+for Flyway-managed migrations and repeatable database objects.
 
-## Window Functions
+------------------------------------------------------------------------
 
-Research functions such as:
+# 50. Common Errors Encountered
 
-```text
-ROW_NUMBER()
-RANK()
-DENSE_RANK()
-SUM() OVER()
-AVG() OVER()
+  -------------------------------------------------------------------------------------
+  Error / Situation             Meaning                 Fix
+  ----------------------------- ----------------------- -------------------------------
+  Configuration file not found  Wrong `flyway.toml`     Use
+                                path                    `D:\mysql-db-lab\flyway.toml`
+
+  Connection refused on 3305    Wrong MySQL port        Use `3306`
+
+  `using password: NO`          Flyway has no password  Configure the local password
+
+  Unknown database              Database does not exist Create the database
+  `customer_order_management`   on selected MySQL       
+                                instance                
+
+  Unknown database `customers`  A table name was used   Use `customer_order_management`
+                                as a database name      
+
+  Failed migration validation   A migration previously  Correct SQL, then `repair`,
+                                failed                  then `migrate`
+
+  Checksum mismatch             An applied migration    Understand the change and use a
+                                was changed             new migration where appropriate
+
+  Table already exists          Database object already Inspect the database before
+                                exists                  rerunning the migration
+
+  Duplicate entry / Error 1062  Data being inserted     Check existing rows and
+                                conflicts with existing migration state before
+                                data                    rerunning
+
+  Schema up to date             No pending versioned    No new migration is required
+                                change exists           
+  -------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+# 51. Troubleshooting Workflow
+
+When a Flyway migration fails, do not immediately delete tables or
+migration history.
+
+Use this workflow:
+
+``` text
+1. Read the Flyway error
+        ↓
+2. Identify the SQL statement that failed
+        ↓
+3. Check the MySQL database state
+        ↓
+4. Check flyway_schema_history
+        ↓
+5. Correct the underlying SQL/database problem
+        ↓
+6. Run repair if Flyway requires it
+        ↓
+7. Run migrate
+        ↓
+8. Run info
+        ↓
+9. Verify the result in MySQL Workbench
 ```
 
-Use them to answer reporting questions such as:
+------------------------------------------------------------------------
 
-- Rank customers by total spending.
-- Find the most recent order for each customer.
-- Calculate running order totals.
+# 52. Complete Working Workflow
 
-## Query Optimisation
+## Step 1 --- Start MySQL
 
-Investigate:
+Normally the Windows service should already be running.
 
-- `EXPLAIN`
-- Index usage
-- Composite indexes
-- Query execution plans
-- Filtering
-- Join performance
+If needed:
+
+``` cmd
+net start MySQL80
+```
+
+------------------------------------------------------------------------
+
+## Step 2 --- Test MySQL
+
+``` cmd
+mysql -u root -p
+```
+
+Then:
+
+``` sql
+SHOW VARIABLES LIKE 'port';
+```
+
+Expected:
+
+``` text
+3306
+```
+
+Exit:
+
+``` sql
+exit;
+```
+
+------------------------------------------------------------------------
+
+## Step 3 --- Check Flyway
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local info
+```
+
+------------------------------------------------------------------------
+
+## Step 4 --- Apply pending migrations
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local migrate
+```
+
+------------------------------------------------------------------------
+
+## Step 5 --- Check again
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local info
+```
+
+If Flyway reports:
+
+``` text
+Schema is up to date.
+No migration necessary.
+```
+
+then there are no pending versioned migrations.
+
+------------------------------------------------------------------------
+
+## Step 6 --- Verify in Workbench
+
+``` sql
+USE customer_order_management;
+
+SHOW TABLES;
+
+SELECT * FROM customers;
+
+SELECT * FROM orders;
+
+SELECT * FROM flyway_schema_history;
+```
+
+------------------------------------------------------------------------
+
+# 53. Final Project Flow
+
+The project can now be understood as four connected layers:
+
+``` text
+                    MySQL Database Lab
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+          ▼                ▼                ▼
+      Flyway           Database          Queries
+    Configuration      Objects          & Reports
+          │                │                │
+          ▼                ▼                ▼
+    flyway.toml       customers       queries/
+                     orders            *.sql
+                     indexes
+                     procedures
+                     views
+          │
+          ▼
+    sql/
+    ├── V1
+    ├── V2
+    ├── V3
+    ├── V4
+    ├── V5
+    ├── V6
+    ├── V7
+    ├── V8
+    ├── V9
+    └── R__...
+```
+
+------------------------------------------------------------------------
+
+# 54. Final Migration Flow
+
+The versioned migration sequence is:
+
+``` text
+V1
+ ↓
+V2
+ ↓
+V3
+ ↓
+V4
+ ↓
+V5
+ ↓
+V6
+ ↓
+V7
+ ↓
+V8
+ ↓
+V9
+```
+
+The repeatable migrations are maintained separately:
+
+``` text
+R__create_customer_order
+R__customer_order_history_procedure
+R__customer_reporting_view
+R__customer_summary_procedure
+```
+
+------------------------------------------------------------------------
+
+# 55. Final Project Structure --- Quick Reference
+
+``` text
+mysql-db-lab/
+│
+├── .git/
+│
+├── flyway.toml
+│
+├── queries/
+│   ├── Advanced_Sql.sql
+│   ├── Aggregation_and_Business_Reporting.sql
+│   ├── customer_order_queries.sql
+│   ├── customer_service_queries.sql
+│   ├── Customer_Summary.sql
+│   ├── indexes_explain.sql
+│   ├── Procedure_Queries.sql
+│   ├── Sorting_Queries.sql
+│   └── Transactions_Queries.sql
+│
+└── sql/
+    ├── R__create_customer_order.sql
+    ├── R__customer_order_history_procedure.sql
+    ├── R__customer_reporting_view.sql
+    ├── R__customer_summary_procedure.sql
+    ├── V1__customers_table.sql
+    ├── V2__customer_details_updation.sql
+    ├── V3__customer_details_inserted.sql
+    ├── V4__customer_upsert.sql
+    ├── V5__create_orders_table.sql
+    ├── V6__insert_orders_data.sql
+    ├── V7__created_cust_order_indexes.sql
+    ├── V8__customer_account_closure.sql
+    └── V9__create_composite_order_index.sql
+```
+
+------------------------------------------------------------------------
+
+# 56. Final Configuration Summary
+
+``` text
+Operating System:
+Windows 11
+
+MySQL:
+8.0.43
+
+MySQL Service:
+MySQL80
+
+Host:
+127.0.0.1
+
+Port:
+3306
+
+User:
+root
+
+Database:
+customer_order_management
+
+Flyway:
+13.7.0
+
+Flyway Installation:
+D:\flyway\flyway-13.7.0
+
+Project:
+D:\mysql-db-lab
+
+Flyway Configuration:
+D:\mysql-db-lab\flyway.toml
+
+Flyway Migration Directory:
+D:\mysql-db-lab\sql
+
+Query Directory:
+D:\mysql-db-lab\queries
+```
+
+------------------------------------------------------------------------
+
+# 57. Final Command Set
+
+## MySQL login
+
+``` cmd
+mysql -u root -p
+```
+
+## MySQL port
+
+``` sql
+SHOW VARIABLES LIKE 'port';
+```
+
+## Start MySQL service
+
+``` cmd
+net start MySQL80
+```
+
+## Flyway status
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local info
+```
+
+## Flyway migrate
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local migrate
+```
+
+## Flyway repair
+
+``` cmd
+"D:\flyway\flyway-13.7.0\flyway.cmd" -configFiles="D:\mysql-db-lab\flyway.toml" -environment=local repair
+```
+
+------------------------------------------------------------------------
+
+# 58. Recommended Daily Workflow
+
+For normal project work:
+
+``` text
+Start MySQL
+    ↓
+Open MySQL Workbench
+    ↓
+Confirm customer_order_management
+    ↓
+Check Flyway info
+    ↓
+Review pending migrations
+    ↓
+Run migrate when required
+    ↓
+Check Flyway info again
+    ↓
+Verify database objects/data
+    ↓
+Use queries/ for reporting and analysis
+```
+
+------------------------------------------------------------------------
+
+# 59. What Belongs Where?
+
+  ------------------------------------------------------------------------------------------
+  Item                                       Location                Purpose
+  ------------------------------------------ ----------------------- -----------------------
+  `flyway.toml`                              Project root            Flyway configuration
+
+  `V1`--`V9`                                 `sql/`                  Versioned database
+                                                                     migrations
+
+  `R__...`                                   `sql/`                  Repeatable Flyway
+                                                                     migrations
+
+  `Advanced_Sql.sql`                         `queries/`              Advanced SQL queries
+
+  `Aggregation_and_Business_Reporting.sql`   `queries/`              Aggregation/reporting
+
+  `customer_order_queries.sql`               `queries/`              Customer/order queries
+
+  `customer_service_queries.sql`             `queries/`              Customer-service
+                                                                     queries
+
+  `Customer_Summary.sql`                     `queries/`              Customer summary
+                                                                     queries
+
+  `indexes_explain.sql`                      `queries/`              Index/explain work
+
+  `Procedure_Queries.sql`                    `queries/`              Procedure-related
+                                                                     queries
+
+  `Sorting_Queries.sql`                      `queries/`              Sorting queries
+
+  `Transactions_Queries.sql`                 `queries/`              Transaction queries
+  ------------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+# 60. Main Lessons From the Project
+
+### Lesson 1 --- Verify the actual MySQL port
+
+Do not assume that the configured port is correct.
+
+Verify with:
+
+``` sql
+SHOW VARIABLES LIKE 'port';
+```
+
+and:
+
+``` cmd
+netstat -ano | findstr :3306
+```
+
+------------------------------------------------------------------------
+
+### Lesson 2 --- Database and table are different
+
+``` text
+customer_order_management
+        ↓
+      Database
+
+customers
+        ↓
+       Table
+```
+
+Therefore:
+
+``` sql
+USE customer_order_management;
+```
+
+not:
+
+``` sql
+USE customers;
+```
+
+------------------------------------------------------------------------
+
+### Lesson 3 --- Understand Flyway history
+
+Flyway tracks migrations through:
+
+``` text
+flyway_schema_history
+```
+
+When a migration fails, inspect the history before attempting random
+fixes.
+
+------------------------------------------------------------------------
+
+### Lesson 4 --- `repair` does not run SQL
+
+Remember:
+
+``` text
+repair ≠ migrate
+```
+
+`repair` fixes migration history.
+
+`migrate` executes migrations.
+
+------------------------------------------------------------------------
+
+### Lesson 5 --- Do not casually modify applied migrations
+
+An applied migration is part of the migration history.
+
+Changing it later can cause checksum validation problems.
+
+Prefer a new version:
+
+``` text
+V10__new_change.sql
+```
+
+rather than changing an already-applied migration.
+
+------------------------------------------------------------------------
+
+### Lesson 6 --- Keep migrations and queries organized
+
+The final repository intentionally separates:
+
+``` text
+sql/
+```
+
+from:
+
+``` text
+queries/
+```
+
+This makes it easier to understand which SQL is controlled by Flyway and
+which SQL is general query/reporting work.
+
+------------------------------------------------------------------------
+
+# 61. Final State
+
+The final repository contains:
+
+``` text
+Flyway configuration
+        ↓
+flyway.toml
+        ↓
+sql/
+        ↓
+V1 → V2 → V3 → V4 → V5 → V6 → V7 → V8 → V9
+        +
+R__ repeatable migrations
+        ↓
+MySQL database
+        ↓
+customer_order_management
+        ↓
+customers + orders + Flyway history
+        ↓
+queries/
+        ↓
+Reporting / aggregation / procedures / sorting /
+transactions / advanced SQL / index analysis
+```
+
+The project therefore represents a complete learning workflow from:
+
+``` text
+MySQL setup
+     ↓
+Workbench connection
+     ↓
+Flyway setup
+     ↓
+Migration troubleshooting
+     ↓
+Customer database
+     ↓
+Order database
+     ↓
+Indexes and later schema changes
+     ↓
+Repeatable database objects
+     ↓
+Reporting and SQL queries
+```
+
+------------------------------------------------------------------------
+
+# 62. Final Troubleshooting Checklist
+
+When setting up this project again on another Windows machine:
+
+``` text
+1. Install MySQL
+        ↓
+2. Confirm MySQL service
+        ↓
+3. Confirm MySQL port
+        ↓
+4. Connect through MySQL Workbench
+        ↓
+5. Create customer_order_management
+        ↓
+6. Install Flyway
+        ↓
+7. Verify flyway.toml location
+        ↓
+8. Verify sql/ migration directory
+        ↓
+9. Configure the local MySQL password securely
+        ↓
+10. Run Flyway info
+        ↓
+11. Run Flyway migrate
+        ↓
+12. If a migration fails, read the exact error
+        ↓
+13. Correct the underlying SQL/database problem
+        ↓
+14. Run repair only when required
+        ↓
+15. Run migrate again
+        ↓
+16. Run info
+        ↓
+17. Verify objects/data in Workbench
+        ↓
+18. Use queries/ for reporting and analysis
+```
+
+------------------------------------------------------------------------
+
+# 63. Final Reminder for GitHub
+
+Before pushing the project to GitHub, verify that:
+
+-   No real MySQL password is committed.
+-   `flyway.toml` does not expose a real password.
+-   Migration filenames follow Flyway naming conventions.
+-   Versioned migrations are not unnecessarily modified after being
+    applied.
+-   `sql/` contains Flyway-managed migrations.
+-   `queries/` contains general query/reporting work.
+-   The README reflects the actual repository structure.
+-   The database connection values are clearly identified as
+    local-development values.
+
+------------------------------------------------------------------------
+
+## Conclusion
+
+This repository documents the complete MySQL + Flyway database lab
+workflow, including the original setup problems, their fixes, the
+evolution from V1 through V9, repeatable database migrations, and the
+separate SQL query collection.
+
+The key reusable workflow is:
+
+``` text
+MySQL
+  ↓
+Workbench
+  ↓
+Database
+  ↓
+Flyway Configuration
+  ↓
+Versioned Migrations
+  ↓
+Repeatable Migrations
+  ↓
+Database Verification
+  ↓
+Queries & Reporting
+```
+
+The most important troubleshooting sequence is:
+
+``` text
+Check MySQL
+    ↓
+Check port
+    ↓
+Check Workbench connection
+    ↓
+Check database
+    ↓
+Check flyway.toml
+    ↓
+Check Flyway authentication
+    ↓
+Run info
+    ↓
+Run migrate
+    ↓
+If failed → understand error
+    ↓
+Fix SQL/database state
+    ↓
+repair if required
+    ↓
+migrate
+    ↓
+info
+    ↓
+verify in Workbench
+```
+
+This structure can be reused as a reference for future MySQL + Flyway
+projects.
+
 
 ---
 
-# Submission Structure
+# Stage 64 — Push the Completed Project to Your Personal GitHub Repository
 
-Do not assume that every part belongs in the same type of file.
+This is the final stage of the project.
 
-For every part, determine whether the requirement represents:
+After completing the MySQL database, Flyway migrations, repeatable migrations, indexes, procedures, views, reports, and SQL query collection, the complete project can be committed and pushed to your **personal GitHub repository**.
 
-- A database structure change.
-- A database data change.
-- A repeatable database object.
-- A read-only query.
-- A stored procedure.
-- An investigation/research task.
-
-Use Flyway where appropriate.
-
-A possible final project structure could contain:
+The local project directory is:
 
 ```text
-mysql-database-lab/
+D:\mysql-db-lab
+```
+
+---
+
+## 64.1 Check the Final Project Structure
+
+Open PowerShell:
+
+```powershell
+cd D:\mysql-db-lab
+```
+
+Check the project files:
+
+```powershell
+dir
+```
+
+The final project should contain:
+
+```text
+D:\mysql-db-lab
+│
+├── .git
+├── flyway.toml
+├── queries
+└── sql
+```
+
+The `queries` directory contains the SQL query collection.
+
+The `sql` directory contains the Flyway versioned and repeatable migrations.
+
+---
+
+## 64.2 Check Git Status
+
+Run:
+
+```powershell
+git status
+```
+
+This shows:
+
+- Modified files
+- New files
+- Deleted files
+- Untracked files
+- Current branch information
+
+Before committing, review the output carefully.
+
+---
+
+## 64.3 Check the Current Branch
+
+Run:
+
+```powershell
+git branch
+```
+
+If the final personal GitHub repository should use `main`, rename the current branch:
+
+```powershell
+git branch -M main
+```
+
+Then verify:
+
+```powershell
+git branch
+```
+
+Expected:
+
+```text
+* main
+```
+
+---
+
+## 64.4 Check the Existing GitHub Remote
+
+Before adding or changing a remote, check the existing configuration:
+
+```powershell
+git remote -v
+```
+
+You may see something similar to:
+
+```text
+origin  https://github.com/YOUR_USERNAME/mysql-db-lab.git (fetch)
+origin  https://github.com/YOUR_USERNAME/mysql-db-lab.git (push)
+```
+
+### If the remote is already your personal repository
+
+Do not add another remote.
+
+Continue to the next step.
+
+### If the remote is incorrect
+
+Change it with:
+
+```powershell
+git remote set-url origin YOUR_PERSONAL_REPOSITORY_URL
+```
+
+Example:
+
+```powershell
+git remote set-url origin https://github.com/YOUR_USERNAME/mysql-db-lab.git
+```
+
+Then verify:
+
+```powershell
+git remote -v
+```
+
+---
+
+## 64.5 Create the Personal GitHub Repository
+
+If the personal GitHub repository does not exist yet:
+
+1. Open GitHub.
+2. Create a new repository.
+3. Give it an appropriate name, for example:
+
+```text
+mysql-db-lab
+```
+
+4. Choose the required visibility.
+5. If the local project already contains its own README and Git history, avoid unnecessarily creating another README in the new repository.
+6. Create the repository.
+
+Then connect the local project to the personal repository:
+
+```powershell
+git remote add origin YOUR_PERSONAL_REPOSITORY_URL
+```
+
+Example:
+
+```powershell
+git remote add origin https://github.com/YOUR_USERNAME/mysql-db-lab.git
+```
+
+Verify:
+
+```powershell
+git remote -v
+```
+
+---
+
+## 64.6 Check for Sensitive Information Before Commit
+
+This is an important step.
+
+The project contains a Flyway configuration file:
+
+```text
+flyway.toml
+```
+
+Make sure it does **not** contain your real MySQL password before pushing to GitHub.
+
+The configuration should use a placeholder such as:
+
+```toml
+password = "YOUR_MYSQL_PASSWORD"
+```
+
+Do not commit:
+
+```text
+real MySQL passwords
+private credentials
+temporary password files
+personal authentication tokens
+```
+
+Review the repository before running:
+
+```powershell
+git add .
+```
+
+---
+
+## 64.7 Review Changes
+
+Run:
+
+```powershell
+git status
+```
+
+For tracked-file changes, inspect the differences:
+
+```powershell
+git diff
+```
+
+For a short status view:
+
+```powershell
+git status --short
+```
+
+This gives you an opportunity to catch accidental files before committing.
+
+---
+
+## 64.8 Stage the Completed Project
+
+Add the project files:
+
+```powershell
+git add .
+```
+
+Then check what is staged:
+
+```powershell
+git status
+```
+
+Make sure the staged files represent the project you actually want to publish.
+
+The staged project should include the important files under:
+
+```text
+queries/
+sql/
+flyway.toml
+README.md
+```
+
+and other intended repository files.
+
+---
+
+## 64.9 Commit the Completed Project
+
+Create the final commit:
+
+```powershell
+git commit -m "Complete MySQL database lab with Flyway migrations and SQL queries"
+```
+
+The commit message describes the completed database lab and its Flyway/query work.
+
+Check the commit:
+
+```powershell
+git log --oneline --max-count=5
+```
+
+---
+
+## 64.10 Push the Completed Project
+
+If the personal GitHub repository uses the `main` branch:
+
+```powershell
+git push -u origin main
+```
+
+The `-u` option establishes the upstream relationship between the local `main` branch and:
+
+```text
+origin/main
+```
+
+After this, future pushes can normally use:
+
+```powershell
+git push
+```
+
+---
+
+## 64.11 Verify the Push
+
+After the push completes, run:
+
+```powershell
+git status
+```
+
+A clean working tree should report:
+
+```text
+nothing to commit, working tree clean
+```
+
+You can also check:
+
+```powershell
+git log --oneline --max-count=5
+```
+
+Then open the personal GitHub repository and verify that the files are visible.
+
+---
+
+## 64.12 Verify the Final GitHub Repository Structure
+
+The personal repository should contain the final project structure:
+
+```text
+mysql-db-lab/
+│
+├── .git/
+│
+├── flyway.toml
 │
 ├── README.md
 │
-├── migrations/
-│   ├── ...
-│   └── ...
+├── queries/
+│   ├── Advanced_Sql.sql
+│   ├── Aggregation_and_Business_Reporting.sql
+│   ├── customer_order_queries.sql
+│   ├── customer_service_queries.sql
+│   ├── Customer_Summary.sql
+│   ├── indexes_explain.sql
+│   ├── Procedure_Queries.sql
+│   ├── Sorting_Queries.sql
+│   └── Transactions_Queries.sql
 │
-└── queries/
-    ├── ...
-    └── ...
+└── sql/
+    ├── R__create_customer_order.sql
+    ├── R__customer_order_history_procedure.sql
+    ├── R__customer_reporting_view.sql
+    ├── R__customer_summary_procedure.sql
+    ├── V1__customers_table.sql
+    ├── V2__customer_details_updation.sql
+    ├── V3__customer_details_inserted.sql
+    ├── V4__customer_upsert.sql
+    ├── V5__create_orders_table.sql
+    ├── V6__insert_orders_data.sql
+    ├── V7__created_cust_order_indexes.sql
+    ├── V8__customer_account_closure.sql
+    └── V9__create_composite_order_index.sql
 ```
 
-The exact migration filenames and versions are intentionally **not provided**.
-
-You are expected to determine the correct Flyway naming convention from the Flyway documentation.
+> The `.git` directory exists locally but is normally not displayed as a normal tracked project file on GitHub. GitHub stores the repository's Git history separately.
 
 ---
 
-# Important Rules
+## 64.13 If the GitHub Repository Already Contains Files
 
-## 1. Do not modify executed versioned migrations
+If the personal GitHub repository was created with an initial README, `.gitignore`, license, or another commit, the remote repository may already have a Git history that is different from the local repository.
 
-Once a versioned migration has been executed, do not edit it to change the database history.
+First check:
 
-Create a new migration instead.
+```powershell
+git remote -v
+```
+
+Then fetch the remote history:
+
+```powershell
+git fetch origin
+```
+
+Inspect the branches:
+
+```powershell
+git branch -a
+```
+
+Do not immediately use:
+
+```powershell
+git push --force
+```
+
+Force-pushing can overwrite remote history.
+
+If the local and remote repositories have unrelated histories, review the situation before choosing whether to merge the histories or recreate the empty GitHub repository.
+
+The safest approach for a new personal repository is generally to create the GitHub repository without an unnecessary initial commit when the project already has its own local Git history.
 
 ---
 
-## 2. Investigate before modifying data
+## 64.14 Complete Git Command Sequence
 
-Before executing an:
+For a project whose personal GitHub repository is already configured correctly:
 
-```sql
-UPDATE
+```powershell
+cd D:\mysql-db-lab
+
+git status
+
+git branch
+
+git branch -M main
+
+git remote -v
+
+git status
+
+git add .
+
+git status
+
+git commit -m "Complete MySQL database lab with Flyway migrations and SQL queries"
+
+git log --oneline --max-count=5
+
+git push -u origin main
+
+git status
 ```
-
-or:
-
-```sql
-DELETE
-```
-
-use a `SELECT` to confirm which records will be affected.
 
 ---
 
-## 3. Do not assume names are unique
+## 64.15 Final Git Workflow
 
-The database deliberately contains:
+The complete project-to-GitHub workflow is:
 
 ```text
-John Smith
-John Smith
+Complete MySQL + Flyway Project
+             ↓
+       Check final files
+             ↓
+        git status
+             ↓
+       Check branch
+             ↓
+       Check remote
+             ↓
+    Check sensitive information
+             ↓
+        git add .
+             ↓
+       Review staged files
+             ↓
+        git commit
+             ↓
+       git push -u origin main
+             ↓
+      Verify GitHub repository
+             ↓
+       git status
+             ↓
+       Working tree clean
 ```
 
-They are different people.
-
-Do not use a person's name as their unique identifier.
-
 ---
 
-## 4. Think about business meaning
+## 64.16 Final Project Completion Checklist
 
-A SQL statement can be syntactically correct and still be a poor database operation.
-
-Before modifying or deleting data, consider:
-
-- Relationships
-- Business rules
-- Historical information
-- Data integrity
-- Referential integrity
-
----
-
-# Learning Objectives
-
-By completing this exercise, you should be able to demonstrate knowledge of:
-
-### Database Design
-
-- Tables
-- Columns
-- Data types
-- String lengths
-- Primary keys
-- Foreign keys
-- Constraints
-- Relationships
-
-### Data Manipulation
-
-- `INSERT`
-- `UPDATE`
-- `DELETE`
-- Upsert
-- `INSERT ... ON DUPLICATE KEY UPDATE`
-
-### Data Retrieval
-
-- `SELECT`
-- `WHERE`
-- `LIKE`
-- `IN`
-- `BETWEEN`
-- `IS NULL`
-- `IS NOT NULL`
-- `ORDER BY`
-- `JOIN`
-- `GROUP BY`
-- `HAVING`
-
-### Database Objects
-
-- Views
-- Stored procedures
-- Functions
-
-### Performance
-
-- Indexes
-- Composite indexes
-- `EXPLAIN`
-- Query optimisation
-
-### Transactions
-
-- `START TRANSACTION`
-- `COMMIT`
-- `ROLLBACK`
-
-### Flyway
-
-- Versioned migrations
-- Repeatable migrations
-- Migration ordering
-- Checksums
-- Migration history
-- Immutable executed migrations
-
----
-
-# Final Principle
-
-The exercise is intentionally designed so that the requirements become more complex over time.
-
-Do not focus only on making individual SQL statements execute.
-
-Think about the system as a whole:
+Before considering the project complete, verify:
 
 ```text
-Business requirement
-        ↓
-What data is required?
-        ↓
-How should the data be represented?
-        ↓
-What constraints protect the data?
-        ↓
-How is the data created?
-        ↓
-How is the data changed?
-        ↓
-How is the data queried?
-        ↓
-How are related records handled?
-        ↓
-How is the database optimised?
-        ↓
-How are database changes versioned?
+[ ] MySQL is working
+[ ] MySQL Workbench connects successfully
+[ ] customer_order_management exists
+[ ] Flyway configuration is correct
+[ ] V1–V9 migrations are present
+[ ] Repeatable R__ migrations are present
+[ ] queries/ contains the SQL query collection
+[ ] README.md describes the actual project structure
+[ ] No real password is stored in the repository
+[ ] git status has been reviewed
+[ ] Correct personal GitHub remote is configured
+[ ] Final changes are committed
+[ ] Project is pushed to main
+[ ] GitHub repository was checked
+[ ] Local working tree is clean
 ```
 
-As new SQL concepts are covered in class, additional requirements can be added to this same system.
+---
+
+## 64.17 Final GitHub Result
+
+After completing Stage 64, the project should exist in both locations:
+
+```text
+LOCAL
+D:\mysql-db-lab
+        │
+        │ git push
+        ▼
+PERSONAL GITHUB REPOSITORY
+        │
+        ├── README.md
+        ├── flyway.toml
+        ├── queries/
+        └── sql/
+```
+
+The final repository therefore contains the complete learning project, its migration history, repeatable database objects, SQL query collection, troubleshooting documentation, and instructions for reproducing the workflow.
+
+---
+
+# Final Project Completion
+
+The complete project workflow is now:
+
+```text
+Stage 1–...
+    ↓
+MySQL Setup
+    ↓
+MySQL Workbench
+    ↓
+Flyway Setup
+    ↓
+V1 → V9
+    ↓
+Repeatable Migrations
+    ↓
+Indexes
+    ↓
+Customer Account Changes
+    ↓
+Procedures / Views
+    ↓
+SQL Queries & Reporting
+    ↓
+Troubleshooting
+    ↓
+README Documentation
+    ↓
+Stage 64
+    ↓
+Git
+    ↓
+Commit
+    ↓
+Push
+    ↓
+Personal GitHub Repository
+```
+
+**Stage 64 completes the project publishing workflow.**
