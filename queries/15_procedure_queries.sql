@@ -1,7 +1,7 @@
-# PROCEDURE QUERY
+-- Part 15: Stored Procedure - Create Customer Order
 USE customer_order_management;
 
-# Test a valid order
+-- Test a valid order.
 CALL create_customer_order(
     1,
     '2026-09-23',
@@ -9,7 +9,7 @@ CALL create_customer_order(
     'PENDING'
 );
 
-# Test invalid customer
+-- Test an invalid customer.
 CALL create_customer_order(
     999,
     '2026-09-23',
@@ -17,7 +17,7 @@ CALL create_customer_order(
     'PENDING'
 );
 
-# Test negative order amount
+-- Test a negative order amount.
 CALL create_customer_order(
     1,
     '2026-09-23',
@@ -25,7 +25,7 @@ CALL create_customer_order(
     'PENDING'
 );
 
-# Test invalid order status
+-- Test an invalid order status.
 CALL create_customer_order(
     1,
     '2026-09-23',
@@ -33,7 +33,7 @@ CALL create_customer_order(
     'SHIPPED'
 );
 
-# Test NULL order date
+-- Test a NULL order date.
 CALL create_customer_order(
     1,
     NULL,
@@ -41,7 +41,7 @@ CALL create_customer_order(
     'PENDING'
 );
 
-# '1016' confirm it actually exist in the orders table
+-- Manual verification of the newly created order.
 SELECT *
 FROM orders
 WHERE order_id = 1016;

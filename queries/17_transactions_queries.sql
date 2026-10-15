@@ -1,6 +1,7 @@
+-- Part 17: Transactions
 USE customer_order_management;
 
-# Transaction Syntax
+-- Transaction Syntax: successful operation.
 START TRANSACTION;
 
 INSERT INTO orders
@@ -10,8 +11,7 @@ VALUES
 
 COMMIT;
 
-
-# Transaction Rollback
+-- Transaction Rollback.
 START TRANSACTION;
 
 INSERT INTO orders
@@ -21,8 +21,7 @@ VALUES
 
 ROLLBACK;
 
-
-# Test invalid customer with a transaction
+-- Test invalid customer with a transaction.
 START TRANSACTION;
 
 INSERT INTO orders
@@ -32,17 +31,17 @@ VALUES
 
 ROLLBACK;
 
-
-# Test invalid amount
+-- Test invalid amount.
 START TRANSACTION;
 
 INSERT INTO orders
     (customer_id, order_date, order_amount, order_status)
 VALUES
     (1, '2026-09-23', -500.00, 'PENDING');
-    
 
-# Test an error after an earlier successful operation
+ROLLBACK;
+
+-- Test an error after an earlier successful operation.
 START TRANSACTION;
 
 INSERT INTO orders
@@ -54,3 +53,5 @@ INSERT INTO orders
     (customer_id, order_date, order_amount, order_status)
 VALUES
     (999, '2026-09-23', 700.00, 'PENDING');
+
+ROLLBACK;
