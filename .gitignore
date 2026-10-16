@@ -1,0 +1,2 @@
+# Flyway configuration containing database credentials
+flyway.toml
