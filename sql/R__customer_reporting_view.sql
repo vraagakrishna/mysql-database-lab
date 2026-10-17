@@ -1,12 +1,11 @@
--- Part 13: Repeatable Migration
--- Customer Reporting View
+-- Part 13: Repeatable Migration - Customer Reporting View
 
-CREATE OR REPLACE VIEW customer_reporting_view AS
+CREATE OR REPLACE VIEW customer_reporting AS
 SELECT
     c.customer_id,
     CONCAT(c.first_name, ' ', c.last_name) AS customer_name,
-    c.country_code,
-    COUNT(o.order_id) AS order_count,
+    c.country_code AS country,
+    COUNT(o.order_id) AS number_of_orders,
     COALESCE(
         SUM(
             CASE
@@ -16,8 +15,7 @@ SELECT
             END
         ),
         0
-    ) AS total_completed_order_value,
-    MAX(o.order_date) AS last_order_date
+    ) AS total_completed_order_value
 FROM customers c
 LEFT JOIN orders o
     ON c.customer_id = o.customer_id
